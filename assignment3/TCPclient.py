@@ -28,13 +28,13 @@ def recvall(sock, progress):
             else:
                 progress.append((curr_time, progress[-1][1] + sys.getsizeof(data_recv)))
         except Exception as e:
-            print("Caught exception in receiving", e)
+            print("Caught exception in receiving: ", e)
             arr = b''.join(fragments)
             return arr
     arr = b''.join(fragments)
     return arr
 
-def get_chunks(thread, start, end, progress):
+def get_chunks(thread, start, end, progress, total_chunks):
     chunks_received = 0
     total_chunks_to_get = end - start + 1
     if thread % 2 == 0:
@@ -49,7 +49,7 @@ def get_chunks(thread, start, end, progress):
                 print(thread, "Connected!")
                 break
             except:
-                print(thread, "Trying to connect...\r", end="")
+                print("Trying to connect..." + str(thread) + "\r", end="")
 
         for c in range(start + chunks_received, end + 1):
             bytes_range = str(c * CHUNK_SIZE) + "-" + str((c+1) * CHUNK_SIZE - 1)
@@ -66,7 +66,7 @@ def get_chunks(thread, start, end, progress):
                     chunk_index = int(int(content_range.split("-")[0]) / CHUNK_SIZE)
                     # print(chunk_index, threading.current_thread().name)
                     chunk_data = data[header_end: header_end + CHUNK_SIZE]
-                    if chunk_index != end and len(data[:header_end + CHUNK_SIZE]) != header_end + CHUNK_SIZE:
+                    if chunk_index != total_chunks - 1 and len(data[:header_end + CHUNK_SIZE]) != header_end + CHUNK_SIZE:
                         break
                     chunks[chunk_index] = chunk_data
                     chunks_received += 1
@@ -76,12 +76,11 @@ def get_chunks(thread, start, end, progress):
         # print("chunks rec", chunks_received, threading.current_thread().name)
         clientSocket.close()
 
-
 if __name__ == "__main__":
 
     while True:
         try:
-            headerSocket = socket.create_connection((serverName, serverPort), timeout=15)
+            headerSocket = socket.create_connection((serverName, serverPort), timeout=10)
             break
         except:
             print("Trying to connect...\r", end="")
@@ -115,7 +114,7 @@ if __name__ == "__main__":
     start = 0
     for i in range(total_threads):
         # print("thr", i, sizes[i], start, start + sizes[i] - 1)
-        t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(i, start, start + sizes[i] - 1, progress[i]))
+        t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(i, start, start + sizes[i] - 1, progress[i], total_chunks))
         start = start + sizes[i]
 
     # starting threads
@@ -126,7 +125,7 @@ if __name__ == "__main__":
     for i in range(total_threads):
         t[i].join()
 
-    out_file = "out5.txt"
+    out_file = "out6.txt"
     try:
         os.remove(out_file)
     except OSError:
