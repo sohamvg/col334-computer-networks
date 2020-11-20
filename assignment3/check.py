@@ -3,7 +3,7 @@
 import hashlib
 
 # File to check
-file_name = 'text.txt'
+file_name = 'out5.txt'
 
 # Correct original md5 goes here
 original_md5 = '70a4b9f4707d258f559f91615297a3ec'  

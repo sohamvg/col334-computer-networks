@@ -1,4 +1,5 @@
 import socket
+import os
 
 def recvall(sock):
     fragments = []
@@ -12,8 +13,9 @@ def recvall(sock):
             if not chunk: 
                 break
             fragments.append(chunk)
-        except socket.timeout:
-            print("caught timeout")
+        except Exception as e:
+            print("caught exception in receiving", e)
+            # print("caught timeout")
             arr = b''.join(fragments)
             return arr
     arr = b''.join(fragments)
@@ -50,11 +52,11 @@ chunks = [None] * total_chunks
 # # print(received_data)
 
 chunks_received = 0
-total_chunks = 40
+# total_chunks = 40
 while chunks_received < total_chunks:
     while True:
         try:
-            clientSocket = socket.create_connection((serverName, serverPort), 10)
+            clientSocket = socket.create_connection((serverName, serverPort), 15)
             print("Connected!")
             break
         except:
@@ -75,9 +77,11 @@ while chunks_received < total_chunks:
                 chunk_index = int(int(content_range.split("-")[0]) / CHUNK_SIZE)
                 print(chunk_index)
                 chunk_data = data[header_end: header_end + CHUNK_SIZE]
-                if len(chunk_data) != CHUNK_SIZE:
+                # chunk_data = data[:header_end + CHUNK_SIZE]
+                if chunk_index != total_chunks -1 and len(data[:header_end + CHUNK_SIZE]) != header_end + CHUNK_SIZE:
                     break
                 chunks[chunk_index] = chunk_data
+                # chunks[chunk_index] = data[header_end: header_end + CHUNK_SIZE]
                 chunks_received += 1
                 
         data = data[header_end + CHUNK_SIZE:]
@@ -90,5 +94,14 @@ while chunks_received < total_chunks:
 #     file.write(received_data)
 
 # clientSocket.close()
+
+out_file = "out5.txt"
+try:
+    os.remove(out_file)
+except OSError:
+    pass
+with open('out5.txt', 'ab') as file:
+    for c in range(0, total_chunks):
+        file.write(chunks[c])
 
 print(total_chunks)
