@@ -1,4 +1,0 @@
-HEAD /big.txt HTTP/1.1
-Host: vayu.iitd.ac.in
-Connection: keep-alive
-

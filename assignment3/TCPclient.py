@@ -4,6 +4,7 @@ import threading
 import time
 import sys
 from matplotlib import pyplot as plt
+import csv
 
 CHUNK_SIZE = 10000
 MAX_CHUNKS = 999999
@@ -37,10 +38,10 @@ def recvall(sock, progress):
 def get_chunks(thread, start, end, progress, total_chunks):
     chunks_received = 0
     total_chunks_to_get = end - start + 1
-    if thread % 2 == 0:
-        serverName = serverNames[0]
-    else:
-        serverName = serverNames[1]
+    # if thread % 2 == 0:
+    #     serverName = serverNames[0]
+    # else:
+    #     serverName = serverNames[1]
 
     while chunks_received < total_chunks_to_get:
         while True:
@@ -61,8 +62,9 @@ def get_chunks(thread, start, end, progress, total_chunks):
         while len(data) > 0:
             header_end = data.find(b"\r\n\r\n") + len(b"\r\n\r\n")
             for line in data[:header_end].decode().splitlines():
-                if line.startswith("Content-Range: bytes "):
-                    content_range = line[len("Content-Range: bytes "):]
+                line = line.lower()
+                if line.startswith("Content-Range: bytes ".lower()):
+                    content_range = line[len("Content-Range: bytes ".lower()):]
                     chunk_index = int(int(content_range.split("-")[0]) / CHUNK_SIZE)
                     # print(chunk_index, threading.current_thread().name)
                     chunk_data = data[header_end: header_end + CHUNK_SIZE]
@@ -73,80 +75,93 @@ def get_chunks(thread, start, end, progress, total_chunks):
                     
             data = data[header_end + CHUNK_SIZE:]
         
-        # print("chunks rec", chunks_received, threading.current_thread().name)
+        # print("chunks received", chunks_received, threading.current_thread().name)
         clientSocket.close()
 
 if __name__ == "__main__":
 
-    while True:
-        try:
-            headerSocket = socket.create_connection((serverName, serverPort), timeout=10)
-            break
-        except:
-            print("Trying to connect...\r", end="")
-    HEAD_request = "HEAD " + object_URL + " HTTP/1.1\r\nHost: " + serverName + "\r\nConnection: keep-alive\r\n\r\n"
-    headerSocket.sendall(HEAD_request.encode())
-    header = recvall(headerSocket, [])
-    headerSocket.close()
-    content_length = 6488666
+    with open(sys.argv[1]) as csv_file:
+        reader = csv.reader(csv_file)
+        row_count = 0
+        for row in reader:
+            row_count += 1
+            object_URL = row[0]
+            total_threads = int(row[1])
+            print("--------------------------------")
+            print("Downloading " + object_URL + " with " + str(total_threads) + " TCP connections")
+        
+            while True:
+                try:
+                    headerSocket = socket.create_connection((serverName, serverPort), timeout=15)
+                    break
+                except:
+                    print("Trying to connect...\r", end="")
+            HEAD_request = "HEAD " + object_URL + " HTTP/1.1\r\nHost: " + serverName + "\r\nConnection: keep-alive\r\n\r\n"
+            headerSocket.sendall(HEAD_request.encode())
+            header = recvall(headerSocket, [])
+            headerSocket.close()
+            content_length = 6488666
 
-    for line in header.decode().splitlines():
-        if line.startswith("Content-Length: "):
-            content_length = int(line[len("Content-Length: "):])
-            print("found content length", content_length)
+            for line in header.decode().splitlines():
+                line = line.lower()
+                if line.startswith("content-length: "):
+                    content_length = int(line[len("content-length: "):])
+                    print("content length", content_length, "bytes")
 
-    t0 = time.time()
-    total_threads = 15
-    sizes = [None] * total_threads
+            t0 = time.time()
+            sizes = [None] * total_threads
+            total_chunks = int(content_length / CHUNK_SIZE) + 1
+            print("chunk size", CHUNK_SIZE)
+            print("total chunks", total_chunks)
 
-    total_chunks = int(content_length / CHUNK_SIZE) + 1
+            zp = total_threads - (total_chunks % total_threads) 
+            pp = total_chunks//total_threads
+            for i in range(total_threads):
+                if(i < zp):
+                    sizes[i] = pp
+                else:
+                    sizes[i] = pp + 1
 
-    zp = total_threads - (total_chunks % total_threads) 
-    pp = total_chunks//total_threads
-    for i in range(total_threads):
-        if(i < zp):
-            sizes[i] = pp
-        else:
-            sizes[i] = pp + 1
+            t = [None] * total_threads
+            progress = [[] for _ in range(total_threads)]
+            start = 0
+            for i in range(total_threads):
+                # print("thr", i, sizes[i], start, start + sizes[i] - 1)
+                t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(i, start, start + sizes[i] - 1, progress[i], total_chunks))
+                start = start + sizes[i]
 
-    t = [None] * total_threads
-    progress = [[] for _ in range(total_threads)]
-    start = 0
-    for i in range(total_threads):
-        # print("thr", i, sizes[i], start, start + sizes[i] - 1)
-        t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(i, start, start + sizes[i] - 1, progress[i], total_chunks))
-        start = start + sizes[i]
+            # starting threads
+            for i in range(total_threads):
+                t[i].start()
 
-    # starting threads
-    for i in range(total_threads):
-        t[i].start()
+            # wait until all threads finish 
+            for i in range(total_threads):
+                t[i].join()
 
-    # wait until all threads finish 
-    for i in range(total_threads):
-        t[i].join()
+            t1 = time.time()
 
-    out_file = "out6.txt"
-    try:
-        os.remove(out_file)
-    except OSError:
-        pass
-    with open(out_file, 'ab') as file:
-        for c in range(0, total_chunks):
+            out_file = "output/download" + str(row_count) + ".txt"
             try:
-                file.write(chunks[c])
-            except Exception as e:
-                print(c, e)
+                os.remove(out_file)
+            except OSError:
+                pass
+            with open(out_file, 'ab') as file:
+                for c in range(0, total_chunks):
+                    try:
+                        file.write(chunks[c])
+                    except Exception as e:
+                        print(c, e)
 
-    for i in range(total_threads):
-        plt.plot([x[0] for x in progress[i]], [x[1] for x in progress[i]], label="thread-" + str(i))
+            plt.figure()
+            for i in range(total_threads):
+                plt.plot([x[0] for x in progress[i]], [x[1] for x in progress[i]], label="thread-" + str(i))
 
-    plt.xlabel("time (microseconds)")
-    plt.ylabel("bytes")
-    plt.title("Download progress for each connection")
-    plt.legend()
-    plt.show()
-    # plt.savefig("conn.png")
+            plt.xlabel("time (microseconds)")
+            plt.ylabel("bytes")
+            plt.title("Download progress for each connection")
+            plt.legend()
+            # plt.show()
+            plt.savefig("output/progress" + str(row_count) + ".png")
 
-    t1 = time.time()
-    print("time", t1 - t0)
+            print("time", t1 - t0)
 
