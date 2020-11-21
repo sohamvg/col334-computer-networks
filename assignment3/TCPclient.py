@@ -10,11 +10,6 @@ CHUNK_SIZE = 10000
 MAX_CHUNKS = 999999
 chunks = [None] * MAX_CHUNKS
 
-serverNames = ['vayu.iitd.ac.in', 'norvig.com']
-serverName = 'norvig.com'
-serverPort = 80
-object_URL = '/big.txt'
-
 def recvall(sock, progress):
     fragments = []
     while True:
@@ -35,13 +30,9 @@ def recvall(sock, progress):
     arr = b''.join(fragments)
     return arr
 
-def get_chunks(thread, start, end, progress, total_chunks):
+def get_chunks(serverName, serverPort, object_URL, thread, start, end, progress, total_chunks):
     chunks_received = 0
     total_chunks_to_get = end - start + 1
-    # if thread % 2 == 0:
-    #     serverName = serverNames[0]
-    # else:
-    #     serverName = serverNames[1]
 
     while chunks_received < total_chunks_to_get:
         while True:
@@ -85,10 +76,16 @@ if __name__ == "__main__":
         row_count = 0
         for row in reader:
             row_count += 1
-            object_URL = row[0]
+            URL = row[0].split("/")
+            serverName = URL[2]
+            serverPort = 80
+            object_URL = ""
+            for i in range(3, len(URL)):
+                object_URL = object_URL + "/" + URL[i]
+
             total_threads = int(row[1])
             print("--------------------------------")
-            print("Downloading " + object_URL + " with " + str(total_threads) + " TCP connections")
+            print("Downloading " + object_URL + " from " + serverName + " with " + str(total_threads) + " TCP connections")
         
             while True:
                 try:
@@ -127,7 +124,7 @@ if __name__ == "__main__":
             start = 0
             for i in range(total_threads):
                 # print("thr", i, sizes[i], start, start + sizes[i] - 1)
-                t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(i, start, start + sizes[i] - 1, progress[i], total_chunks))
+                t[i] = threading.Thread(target=get_chunks, name='t' + str(i), args=(serverName, serverPort, object_URL, i, start, start + sizes[i] - 1, progress[i], total_chunks))
                 start = start + sizes[i]
 
             # starting threads
