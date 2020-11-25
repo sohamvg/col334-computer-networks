@@ -11,6 +11,13 @@ MAX_CHUNKS = 999999
 chunks = [None] * MAX_CHUNKS
 
 def recvall(sock, progress):
+    """
+        Args:
+            sock: socket object
+            progress: progress list having values (time, bytes downloaded)
+        Returns:
+            Data received from the server for a request (GET/HEAD) until all data is received or timeout occurs.
+    """
     fragments = []
     while True:
         try:
@@ -31,24 +38,30 @@ def recvall(sock, progress):
     return arr
 
 def get_chunks(serverName, serverPort, object_URL, thread, start, end, progress, total_chunks):
+    """
+        Download chunks[start:end] for object_URL from (serverName, serverPort) via thread
+    """
     chunks_received = 0
     total_chunks_to_get = end - start + 1
 
     while chunks_received < total_chunks_to_get:
         while True:
             try:
+                # create connection with timeout 15
                 clientSocket = socket.create_connection((serverName, serverPort), timeout=15)
                 print(thread, "Connected!")
                 break
             except:
                 print("Trying to connect..." + str(thread) + "\r", end="")
 
+        # create multiple GET requests for thread
         for c in range(start + chunks_received, end + 1):
             bytes_range = str(c * CHUNK_SIZE) + "-" + str((c+1) * CHUNK_SIZE - 1)
             GET_request = "GET " + object_URL + " HTTP/1.1\r\nHost: " + serverName + "\r\nConnection: keep-alive\r\nRange: bytes=" + bytes_range + "\r\n\r\n"
             clientSocket.sendall(GET_request.encode())
             # print(bytes_range, threading.current_thread().name)
 
+        # receive data and fill in the chunks
         data = recvall(clientSocket, progress)
         while len(data) > 0:
             header_end = data.find(b"\r\n\r\n") + len(b"\r\n\r\n")
@@ -87,6 +100,7 @@ if __name__ == "__main__":
             print("--------------------------------")
             print("Downloading " + object_URL + " from " + serverName + " with " + str(total_threads) + " TCP connections")
         
+            # send an initial HEAD request to get content length
             while True:
                 try:
                     headerSocket = socket.create_connection((serverName, serverPort), timeout=15)
@@ -111,6 +125,7 @@ if __name__ == "__main__":
             print("chunk size", CHUNK_SIZE)
             print("total chunks", total_chunks)
 
+            # pre-assign chunks to threads uniformly
             zp = total_threads - (total_chunks % total_threads) 
             pp = total_chunks//total_threads
             for i in range(total_threads):
@@ -119,6 +134,7 @@ if __name__ == "__main__":
                 else:
                     sizes[i] = pp + 1
 
+            # download file over multiple threads
             t = [None] * total_threads
             progress = [[] for _ in range(total_threads)]
             start = 0
@@ -149,6 +165,7 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(c, e)
 
+            # plotting
             plt.figure()
             for i in range(total_threads):
                 plt.plot([x[0] for x in progress[i]], [x[1] for x in progress[i]], label="thread-" + str(i))
